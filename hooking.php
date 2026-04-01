@@ -23,7 +23,10 @@ function c(string ...$nomes): string
     return implode('', array_map(fn($n) => C[$n] ?? '', $nomes));
 }
 
-function rst(): string { return C['rst']; }
+function rst(): string
+{
+    return C['rst'];
+}
 
 function linha(string $cor, string $icone, string $texto): void
 {
@@ -55,7 +58,7 @@ function inputUsuario(string $mensagem): void
     echo c('rst', 'bold', 'ciano') . "  ▸ $mensagem: " . c('fverde');
 }
 
-// ==================== BANNER CORRIGIDO ====================
+// ==================== BANNER (VERSÃO SEGURA) ====================
 function hookingBanner(): void
 {
     system('clear');
@@ -78,12 +81,11 @@ function hookingBanner(): void
   ██████╔╝██║   ██║██║  ███╗█████╔╝ ██║██╔██╗ ██║██║  ███╗
   ██╔══██╗██║   ██║██║   ██║██╔═██╗ ██║██║╚██╗██║██║   ██║
   ██║  ██║╚██████╔╝╚██████╔╝██║  ██╗██║██║ ╚████║╚██████╔╝
-  ╚═╝  ╚╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝ 
+  ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝ 
 
 " . c('ciano') . "  Coded By: Hooking | Base: KellerSS | Termux Edition" . rst() . "\n\n";
 }
 
-// ==================== ADB HELPERS ====================
 function garantirPermissoesBinarios(): void
 {
     $binarios = [
@@ -91,7 +93,9 @@ function garantirPermissoesBinarios(): void
         '/data/data/com.termux/files/usr/bin/clear',
     ];
     foreach ($binarios as $bin) {
-        if (file_exists($bin)) @chmod($bin, 0755);
+        if (file_exists($bin)) {
+            @chmod($bin, 0755);
+        }
     }
 }
 
@@ -100,17 +104,41 @@ function adb(string $cmd): string
     return trim((string) shell_exec($cmd . ' 2>/dev/null'));
 }
 
-// ==================== VERIFICAÇÕES ====================
 function verificarDispositivoADB(): bool
 {
     garantirPermissoesBinarios();
-    $output = (string) shell_exec('adb devices');
-    if (strpos($output, 'device') === false) {
-        erro("Nenhum dispositivo ADB conectado!");
-        erro("Use a opção [0] → Conectar ADB");
+
+    $output  = (string) shell_exec('adb devices');
+    $linhas  = array_slice(explode("\n", trim($output)), 1);
+    $devices = [];
+
+    foreach ($linhas as $linha) {
+        $linha = trim($linha);
+        if (!empty($linha) && strpos($linha, 'device') !== false) {
+            $partes = preg_split('/\s+/', $linha);
+            if (isset($partes[0])) {
+                $devices[] = $partes[0];
+            }
+        }
+    }
+
+    $total = count($devices);
+
+    if ($total === 0) {
+        erro("Nenhum dispositivo encontrado.");
+        erro("Faça o pareamento de IP ou conecte um dispositivo via USB.");
         exit(1);
     }
-    ok("Dispositivo ADB detectado");
+
+    if ($total > 1) {
+        erro("Mais de um dispositivo/emulador conectado.");
+        foreach ($devices as $dev) {
+            echo "    - $dev\n";
+        }
+        exit(1);
+    }
+
+    ok("Dispositivo conectado com permissões adequadas");
     return true;
 }
 
@@ -119,19 +147,20 @@ function verificarRoot(): void
     secao(2, 'VERIFICANDO ROOT');
     $su = adb('adb shell "which su 2>/dev/null || echo notfound"');
     if ($su !== 'notfound') {
-        erro("Root detectado (su encontrado)");
+        erro("Root detectado via comando 'su'");
     } else {
-        ok("Nenhum binário su encontrado");
+        ok("Nenhum binário 'su' encontrado");
     }
 }
 
 function verificarSELinux(): void
 {
     secao(3, 'VERIFICANDO SELINUX');
-    $status = adb('adb shell getenforce');
-    echo "    Status: " . c('bold', 'ciano') . $status . rst() . "\n";
-    if (stripos($status, 'Permissive') !== false) {
-        erro("SELinux em modo Permissive (inseguro)");
+    $selinux = adb('adb shell getenforce');
+    echo "    SELinux status: " . c('bold', 'ciano') . $selinux . rst() . "\n";
+
+    if (stripos($selinux, 'Permissive') !== false) {
+        erro("SELinux está em modo Permissive (inseguro)");
     } else {
         ok("SELinux em modo Enforcing");
     }
@@ -140,42 +169,52 @@ function verificarSELinux(): void
 function verificarMagisk(): void
 {
     secao(4, 'VERIFICANDO MAGISK / KERNELSU / APATCH');
-    $detect = ['Magisk' => '/data/adb/magisk', 'KernelSU' => '/data/adb/ksu', 'APatch' => '/data/adb/ap'];
+    $detect = [
+        'Magisk'   => '/data/adb/magisk',
+        'KernelSU' => '/data/adb/ksu',
+        'APatch'   => '/data/adb/ap',
+    ];
+
     $encontrado = false;
     foreach ($detect as $nome => $path) {
-        if (adb("adb shell \"ls $path 2>/dev/null\"")) {
+        $res = adb("adb shell \"ls $path 2>/dev/null\"");
+        if (!empty($res)) {
             erro("$nome detectado");
             $encontrado = true;
         }
     }
-    if (!$encontrado) ok("Nenhuma ferramenta de root detectada");
+    if (!$encontrado) {
+        ok("Nenhuma ferramenta de root conhecida detectada");
+    }
 }
 
 function verificarScriptsAtivos(): void
 {
-    secao(5, 'VERIFICANDO PROCESSOS DE HOOK');
-    $proc = adb('adb shell "ps -ef | grep -E \'frida|magisk|inject|hook|cheat|lsass\' || echo clean"');
-    if (strpos($proc, 'frida') !== false || strpos($proc, 'inject') !== false) {
-        erro("Processos de hooking detectados!");
+    secao(5, 'VERIFICANDO SCRIPTS / MÓDULOS ATIVOS');
+    $processes = adb('adb shell "ps -ef | grep -E \'frida|magisk|inject|hook|cheat|lsass\' || echo clean"');
+
+    if (strpos($processes, 'frida') !== false || strpos($processes, 'inject') !== false) {
+        erro("Processos suspeitos de hooking/injeção detectados");
     } else {
-        ok("Nenhum processo suspeito encontrado");
+        ok("Nenhum processo de hooking óbvio encontrado");
     }
 }
 
-function verificarJogoInstalado(string $pacote, string $nome): void
+function verificarJogoInstalado(string $pacote, string $nomeJogo): void
 {
-    secao(1, "VERIFICANDO $nome");
-    if (adb("adb shell \"pm list packages | grep $pacote\"")) {
-        ok("$nome encontrado");
-    } else {
-        erro("$nome NÃO está instalado!");
+    secao(1, "VERIFICANDO $nomeJogo");
+
+    $instalado = adb("adb shell \"pm list packages | grep $pacote\"");
+    if (empty($instalado)) {
+        erro("$nomeJogo NÃO está instalado!");
         exit(1);
     }
+    ok("$nomeJogo encontrado ($pacote)");
 }
 
-// ==================== FUNÇÃO PRINCIPAL ====================
 function escanearFreeFire(string $pacote, string $nomeJogo): void
 {
+    garantirPermissoesBinarios();
     system('clear');
     hookingBanner();
 
@@ -185,47 +224,74 @@ function escanearFreeFire(string $pacote, string $nomeJogo): void
         system('pkg install -y android-tools > /dev/null 2>&1');
     }
 
+    date_default_timezone_set('America/Sao_Paulo');
     shell_exec('adb start-server > /dev/null 2>&1');
 
     verificarJogoInstalado($pacote, $nomeJogo);
 
-    $android = adb('adb shell getprop ro.build.version.release');
-    if ($android) echo c('bold', 'azul') . "  [+] Android: $android\n" . rst();
+    $androidVer = adb('adb shell getprop ro.build.version.release');
+    if (!empty($androidVer)) {
+        echo c('bold', 'azul') . "  [+] Versão do Android: $androidVer\n" . rst();
+    }
 
     verificarRoot();
     verificarSELinux();
     verificarMagisk();
     verificarScriptsAtivos();
 
-    echo "\n" . c('bold', 'verde') . "  ✓ ANÁLISE CONCLUÍDA ✓\n" . rst();
-    echo c('branco') . "\n  Obrigado por usar o HOOKING Anti-Cheat\n";
-    echo c('branco') . "  By santos-ss\n\n" . rst();
+    echo "\n" . c('bold', 'ciano') . "  ► RESUMO DA ANÁLISE\n  -------------------\n\n" . rst();
+    echo c('bold', 'verde') . "  ✓ VERIFICAÇÃO CONCLUÍDA ✓\n" . rst();
 
-    echo c('ciano') . "  Pressione Enter para voltar ao menu...\n" . rst();
+    echo c('bold', 'branco') . "\n\n\t Obrigado por usar o HOOKING Anti-Cheat.\n";
+    echo c('bold', 'branco') . "\t                 By santos-ss\n\n" . rst();
+
+    echo c('bold', 'ciano') . "  Pressione Enter para voltar ao menu...\n" . rst();
     fgets(STDIN);
 }
 
-// ==================== MENU ====================
 function conectarADB(): void
 {
     system('clear');
     hookingBanner();
 
+    echo c('bold', 'azul') . "  → Verificando se o ADB está instalado...\n" . rst();
     if (empty(adb('adb version'))) {
-        aviso("Instalando ADB...");
+        aviso("ADB não encontrado. Instalando android-tools...");
         system('pkg install android-tools -y');
+        info("Android-tools instalado com sucesso!");
+    } else {
+        info("ADB já está instalado.");
     }
 
-    inputUsuario("Porta de pareamento (ex: 45678)");
-    $port = trim(fgets(STDIN) ?? '');
-    system("adb pair localhost:$port");
+    echo "\n";
+    inputUsuario("Qual a sua porta para o pareamento (ex: 45678)?");
+    $pairPort = trim(fgets(STDIN, 1024) ?? '');
 
-    inputUsuario("Porta de conexão (ex: 12345)");
-    $port = trim(fgets(STDIN) ?? '');
-    system("adb connect localhost:$port");
+    if (!is_numeric($pairPort) || empty($pairPort)) {
+        erro("Porta inválida! Retornando ao menu.");
+        sleep(2);
+        return;
+    }
 
-    echo "\n  Pressione Enter para voltar...";
-    fgets(STDIN);
+    echo c('bold', 'amarelo') . "\n  [!] Agora, digite o código de pareamento que aparece no celular e pressione Enter.\n" . rst();
+    system('adb pair localhost:' . intval($pairPort));
+
+    echo "\n";
+    inputUsuario("Qual a sua porta para a conexão (ex: 12345)?");
+    $connectPort = trim(fgets(STDIN, 1024) ?? '');
+
+    if (!is_numeric($connectPort) || empty($connectPort)) {
+        erro("Porta inválida! Retornando ao menu.");
+        sleep(2);
+        return;
+    }
+
+    echo c('bold', 'amarelo') . "\n  [!] Conectando ao dispositivo...\n" . rst();
+    system('adb connect localhost:' . intval($connectPort));
+    info("Processo de conexão finalizado. Verifique a saída acima.");
+
+    echo c('bold', 'branco') . "\n  [+] Pressione Enter para voltar ao menu...\n" . rst();
+    fgets(STDIN, 1024);
 }
 
 function exibirMenu(): void
@@ -234,45 +300,57 @@ function exibirMenu(): void
     echo c('bold', 'azul') . "  ║      MENU PRINCIPAL      ║\n";
     echo c('bold', 'azul') . "  ╚══════════════════════════╝\n\n" . rst();
 
-    echo c('amarelo') . "  [0] Conectar ADB (Wi-Fi)\n";
-    echo c('verde')   . "  [1] Escanear Free Fire Normal\n";
-    echo c('verde')   . "  [2] Escanear Free Fire MAX\n";
-    echo c('vermelho'). "  [S] Sair\n\n" . rst();
+    echo c('amarelo') . "  [0] " . c('branco') . "Conectar ADB " . c('cinza') . "(Pareamento e conexão via ADB)\n" . rst();
+    echo c('verde')   . "  [1] " . c('branco') . "Escanear FreeFire Normal\n" . rst();
+    echo c('verde')   . "  [2] " . c('branco') . "Escanear FreeFire Max\n" . rst();
+    echo c('vermelho'). "  [S] " . c('branco') . "Sair\n\n" . rst();
 }
 
 function lerOpcao(): string
 {
+    $validas = ['0', '1', '2', 'S', 's'];
     do {
-        inputUsuario("Escolha uma opção");
-        $op = strtoupper(trim(fgets(STDIN) ?? ''));
-    } while (!in_array($op, ['0','1','2','S'], true));
+        inputUsuario("Escolha uma das opções acima");
+        $opcao = trim(fgets(STDIN, 1024) ?? '');
+        if (!in_array($opcao, $validas, true)) {
+            erro("Opção inválida! Tente novamente.");
+            echo "\n";
+        }
+    } while (!in_array($opcao, $validas, true));
 
-    return $op;
+    return strtoupper($opcao);
 }
 
-// ====================== INÍCIO ======================
+// ====================== INÍCIO DO SCRIPT ======================
+
 garantirPermissoesBinarios();
 system('clear');
 hookingBanner();
+sleep(1);
+echo "\n";
 
 while (true) {
     exibirMenu();
-    $op = lerOpcao();
+    $opcao = lerOpcao();
 
-    switch ($op) {
+    switch ($opcao) {
         case '0':
             conectarADB();
             system('clear');
             hookingBanner();
             break;
+
         case '1':
-            escanearFreeFire('com.dts.freefireth', 'Free Fire Normal');
+            escanearFreeFire('com.dts.freefireth', 'FreeFire Normal');
             break;
+
         case '2':
             escanearFreeFire('com.dts.freefiremax', 'Free Fire MAX');
             break;
+
         case 'S':
-            echo "\n\n  Obrigado por usar o HOOKING!\n\n";
+            echo "\n\n\t Obrigado por usar o HOOKING Anti-Cheat.\n";
+            echo "\t GitHub: santos-ss/Hooking\n\n";
             exit(0);
     }
 }
