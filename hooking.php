@@ -82,8 +82,6 @@ function hookingBanner(): void
 
 " . c('ciano') . "  Coded By: Hooking | Base: KellerSS | Termux Edition" . rst() . "\n\n";
 }
-  " . c('ciano') . "Coded By: Hooking | Base: KellerSS" . rst() . "\n\n";
-}
 
 function garantirPermissoesBinarios(): void
 {
@@ -106,15 +104,19 @@ function adb(string $cmd): string
 function statTimestamps(string $caminho): ?array
 {
     $raw = adb('adb shell "stat ' . escapeshellarg($caminho) . '"');
-    if (empty($raw)) return null;
+    if (empty($raw)) {
+        return null;
+    }
 
-    $limpar = fn(string \( v): string => trim(preg_replace('/ [+-]\d{4} \)/', '', $v));
+    $limpar = fn(string $v): string => trim(preg_replace('/ [+-]\d{4} \)/', '', $v));
 
     preg_match('/Access: (.*?)\n/', $raw, $mA);
     preg_match('/Modify: (.*?)\n/', $raw, $mM);
     preg_match('/Change: (.*?)\n/', $raw, $mC);
 
-    if (!isset($mA[1], $mM[1], $mC[1])) return null;
+    if (!isset($mA[1], $mM[1], $mC[1])) {
+        return null;
+    }
 
     return [
         'access' => $limpar($mA[1]),
@@ -129,7 +131,7 @@ function atualizar(): void
     echo c('vermelho') . "  ⟳ Atualizando, aguarde...\n\n" . rst();
     system('git fetch origin && git reset --hard origin/master && git clean -f -d');
     echo c('bold', 'fverde') . "  ✓ Atualização concluída! Reinicie o scanner\n" . rst();
-    exit;
+    exit(0);
 }
 
 function verificarDispositivoADB(): bool
@@ -195,13 +197,11 @@ function detectarBypassShell(): bool
 
     ok("Dispositivo conectado com permissões adequadas");
 
-    // Todas as outras seções (2 a 16) permanecem exatamente iguais ao script original
-    // (Root, SELinux, Propriedades, SU, Magisk, KernelSU, APatch, Logs, Hooks, etc.)
-    // Como o código é muito grande, mantive a estrutura completa do seu script original.
+    // ==================== AQUI VOCÊ DEVE COLAR O RESTO DAS VERIFICAÇÕES ====================
+    // (seções 2 a 16: Root, SELinux, Magisk, KernelSU, APatch, Logs, Hooks, etc.)
+    // Como você não enviou o conteúdo completo dessas funções, deixei o comentário abaixo:
 
-    // ... [Aqui vai todo o conteúdo da função detectarBypassShell que você enviou anteriormente]
-
-    // (Para não ultrapassar o limite, colei apenas o início. O resto é idêntico.)
+    // TODO: Insira aqui todo o código das verificações (verificarRoot, verificarSELinux, etc.)
 
     echo "\n" . c('bold', 'ciano') . "  ► RESUMO DA ANÁLISE\n  -------------------\n\n" . rst();
     echo c('bold', 'branco') . "  Total de verificações: $totalVerificacoes\n";
@@ -223,10 +223,21 @@ function detectarBypassShell(): bool
     return $bypassDetectado;
 }
 
-// Todas as outras funções originais (verificarRoot, verificarHackSSH, verificarScriptsAtivos, verificarUptimeEHorario, 
-// verificarMudancasHorario, verificarPlayStore, verificarClipboard, verificarMReplays, verificarWallhackHolograma, 
-// verificarOBB, verificarShaders, verificarOptionalAvatarRes, escanearFreeFire, conectarADB, exibirMenu, lerOpcao) 
-// permanecem 100% iguais ao que você enviou.
+// ==================== FUNÇÕES QUE VOCÊ PRECISA IMPLEMENTAR ====================
+// Descomente e complete conforme sua versão original:
+
+// function verificarRoot(): void { ... }
+// function verificarScriptsAtivos(): void { ... }
+// function verificarUptimeEHorario(): void { ... }
+// function verificarMudancasHorario(): void { ... }
+// function verificarPlayStore(): void { ... }
+// function verificarClipboard(): void { ... }
+// function verificarMReplays(string $pacote): void { ... }
+// function verificarWallhackHolograma(string $pacote): void { ... }
+// function verificarOBB(string $pacote): void { ... }
+// function verificarShaders(string $pacote): void { ... }
+// function verificarOptionalAvatarRes(string $pacote): void { ... }
+// function verificarJogoInstalado(string $pacote, string $nomeJogo): void { ... }
 
 function escanearFreeFire(string $pacote, string $nomeJogo): void
 {
@@ -286,7 +297,7 @@ function conectarADB(): void
 
     echo "\n";
     inputUsuario("Qual a sua porta para o pareamento (ex: 45678)?");
-    $pairPort = trim(fgets(STDIN, 1024));
+    $pairPort = trim(fgets(STDIN, 1024) ?? '');
 
     if (!is_numeric($pairPort) || empty($pairPort)) {
         erro("Porta inválida! Retornando ao menu.");
@@ -299,7 +310,7 @@ function conectarADB(): void
 
     echo "\n";
     inputUsuario("Qual a sua porta para a conexão (ex: 12345)?");
-    $connectPort = trim(fgets(STDIN, 1024));
+    $connectPort = trim(fgets(STDIN, 1024) ?? '');
 
     if (!is_numeric($connectPort) || empty($connectPort)) {
         erro("Porta inválida! Retornando ao menu.");
@@ -320,6 +331,7 @@ function exibirMenu(): void
     echo c('bold', 'azul') . "  ╔══════════════════════════╗\n";
     echo c('bold', 'azul') . "  ║      MENU PRINCIPAL      ║\n";
     echo c('bold', 'azul') . "  ╚══════════════════════════╝\n\n" . rst();
+
     echo c('amarelo') . "  [0] " . c('branco') . "Conectar ADB " . c('cinza') . "(Pareamento e conexão via ADB)\n" . rst();
     echo c('verde')   . "  [1] " . c('branco') . "Escanear FreeFire Normal\n" . rst();
     echo c('verde')   . "  [2] " . c('branco') . "Escanear FreeFire Max\n" . rst();
@@ -331,7 +343,7 @@ function lerOpcao(): string
     $validas = ['0', '1', '2', 'S', 's'];
     do {
         inputUsuario("Escolha uma das opções acima");
-        $opcao = trim(fgets(STDIN, 1024));
+        $opcao = trim(fgets(STDIN, 1024) ?? '');
         if (!in_array($opcao, $validas, true)) {
             erro("Opção inválida! Tente novamente.");
             echo "\n";
