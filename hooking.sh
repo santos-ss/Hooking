@@ -24,7 +24,7 @@ log() {
 log "🚀 Iniciando scan completo - Log gerado: hooking_scan_$TIMESTAMP.log"
 
 # ================== ANTI-BYPASS: CHECKSUM ==================
-ORIGINAL_HASH="COLOQUE_O_HASH_AQUI_DEPOIS_DE_GERAR"  
+ORIGINAL_HASH= "eaa669cec3049644a44ce77a0ebdb4a5ed5d1a9c8124da9e4eb9a57515674657"
 
 CURRENT_HASH=$(sha256sum "$0" 2>/dev/null | awk '{print $1}')
 
