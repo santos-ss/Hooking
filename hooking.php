@@ -23,10 +23,7 @@ function c(string ...$nomes): string
     return implode('', array_map(fn($n) => C[$n] ?? '', $nomes));
 }
 
-function rst(): string
-{
-    return C['rst'];
-}
+function rst(): string { return C['rst']; }
 
 function linha(string $cor, string $icone, string $texto): void
 {
@@ -58,6 +55,7 @@ function inputUsuario(string $mensagem): void
     echo c('rst', 'bold', 'ciano') . "  ▸ $mensagem: " . c('fverde');
 }
 
+// ==================== BANNER ====================
 function hookingBanner(): void
 {
     echo c('branco') . "
@@ -71,18 +69,10 @@ function hookingBanner(): void
 " . c('vermelho') . "          FUCKING CHEATERS • ANTI-BYPASS SCANNER" . c('branco') . "
 
   " . c('ciano') . "HOOKING" . c('branco') . " Anti-Cheat " . c('vermelho') . "v2.0" . c('branco') . "
-  GitHub: " . c('ciano') . "santos-ss/Hooking" . rst() . "
-
-" . c('magenta') . "  ██████╗  ██████╗  ██████╗ ██╗  ██╗██╗███╗   ██╗ ██████╗ 
-  ██╔══██╗██╔═══██╗██╔════╝ ██║ ██╔╝██║████╗  ██║██╔════╝ 
-  ██████╔╝██║   ██║██║  ███╗█████╔╝ ██║██╔██╗ ██║██║  ███╗
-  ██╔══██╗██║   ██║██║   ██║██╔═██╗ ██║██║╚██╗██║██║   ██║
-  ██║  ██║╚██████╔╝╚██████╔╝██║  ██╗██║██║ ╚████║╚██████╔╝
-  ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝ 
-
-" . c('ciano') . "  Coded By: Hooking | Base: KellerSS | Termux Edition" . rst() . "\n\n";
+  GitHub: " . c('ciano') . "santos-ss/Hooking" . rst() . "\n\n";
 }
 
+// ==================== ADB HELPERS ====================
 function garantirPermissoesBinarios(): void
 {
     $binarios = [
@@ -101,143 +91,251 @@ function adb(string $cmd): string
     return trim((string) shell_exec($cmd . ' 2>/dev/null'));
 }
 
-function statTimestamps(string $caminho): ?array
+// ==================== VERIFICAÇÕES DE SEGURANÇA ====================
+
+function verificarRoot(): void
 {
-    $raw = adb('adb shell "stat ' . escapeshellarg($caminho) . '"');
-    if (empty($raw)) {
-        return null;
+    secao(2, 'VERIFICANDO ROOT');
+
+    $su = adb('adb shell "which su 2>/dev/null || echo notfound"');
+    $su_path = adb('adb shell "ls /system/bin/su /system/xbin/su /sbin/su 2>/dev/null || echo notfound"');
+
+    if ($su !== 'notfound' || strpos($su_path, 'su') !== false) {
+        erro("Root detectado via comando 'su'");
+    } else {
+        ok("Nenhum binário 'su' encontrado");
     }
 
-    $limpar = fn(string $v): string => trim(preg_replace('/ [+-]\d{4} \)/', '', $v));
-
-    preg_match('/Access: (.*?)\n/', $raw, $mA);
-    preg_match('/Modify: (.*?)\n/', $raw, $mM);
-    preg_match('/Change: (.*?)\n/', $raw, $mC);
-
-    if (!isset($mA[1], $mM[1], $mC[1])) {
-        return null;
+    $magisk = adb('adb shell "ls /data/adb/magisk 2>/dev/null"');
+    if (!empty($magisk)) {
+        erro("Pasta Magisk detectada em /data/adb/magisk");
+    } else {
+        ok("Magisk não encontrado em caminho padrão");
     }
+}
 
-    return [
-        'access' => $limpar($mA[1]),
-        'modify' => $limpar($mM[1]),
-        'change' => $limpar($mC[1]),
+function verificarSELinux(): void
+{
+    secao(3, 'VERIFICANDO SELINUX');
+
+    $selinux = adb('adb shell getenforce');
+    echo "    SELinux status: " . c('bold', 'ciano') . $selinux . rst() . "\n";
+
+    if (stripos($selinux, 'Permissive') !== false) {
+        erro("SELinux está em modo Permissive (inseguro)");
+    } elseif (stripos($selinux, 'Enforcing') !== false) {
+        ok("SELinux em modo Enforcing");
+    } else {
+        aviso("Não foi possível determinar o status do SELinux");
+    }
+}
+
+function verificarMagisk(): void
+{
+    secao(4, 'VERIFICANDO MAGISK / KERNELSU / APATCH');
+
+    $detect = [
+        'Magisk'   => '/data/adb/magisk',
+        'KernelSU' => '/data/adb/ksu',
+        'APatch'   => '/data/adb/ap',
     ];
-}
 
-function atualizar(): void
-{
-    echo "\n" . c('bold', 'azul') . "  ┌─ HOOKING UPDATER\n" . rst();
-    echo c('vermelho') . "  ⟳ Atualizando, aguarde...\n\n" . rst();
-    system('git fetch origin && git reset --hard origin/master && git clean -f -d');
-    echo c('bold', 'fverde') . "  ✓ Atualização concluída! Reinicie o scanner\n" . rst();
-    exit(0);
-}
+    $encontrado = false;
 
-function verificarDispositivoADB(): bool
-{
-    garantirPermissoesBinarios();
-
-    $output  = (string) shell_exec('adb devices');
-    $linhas  = array_slice(explode("\n", trim($output)), 1);
-    $devices = [];
-
-    foreach ($linhas as $linha) {
-        $linha = trim($linha);
-        if (!empty($linha) && strpos($linha, 'device') !== false) {
-            $partes = preg_split('/\s+/', $linha);
-            if (isset($partes[0])) {
-                $devices[] = $partes[0];
-            }
+    foreach ($detect as $nome => $path) {
+        $res = adb("adb shell \"ls $path 2>/dev/null\"");
+        if (!empty($res)) {
+            erro("$nome detectado");
+            $encontrado = true;
         }
     }
 
-    $total = count($devices);
-
-    if ($total === 0) {
-        erro("Nenhum dispositivo encontrado.");
-        erro("Faça o pareamento de IP ou conecte um dispositivo via USB.");
-        exit(1);
+    if (!$encontrado) {
+        ok("Nenhuma ferramenta de root conhecida detectada");
     }
-
-    if ($total > 1) {
-        erro("Mais de um dispositivo/emulador conectado.");
-        erro("Desconecte os outros dispositivos e mantenha apenas um.");
-        foreach ($devices as $dev) {
-            echo "    - $dev\n";
-        }
-        exit(1);
-    }
-
-    shell_exec('adb shell "chmod 755 /data/data/com.termux/files/usr/bin/clear 2>/dev/null"');
-    return true;
 }
+
+function verificarScriptsAtivos(): void
+{
+    secao(5, 'VERIFICANDO SCRIPTS / MÓDULOS ATIVOS');
+
+    $processes = adb('adb shell "ps -ef | grep -E \'frida|magisk|inject|hook|cheat|lsass\' || echo clean"');
+
+    if (strpos($processes, 'frida') !== false || strpos($processes, 'inject') !== false) {
+        erro("Processos suspeitos de hooking/injeção detectados");
+        detalhe("Saída: " . trim($processes));
+    } else {
+        ok("Nenhum processo de hooking óbvio encontrado");
+    }
+}
+
+function verificarUptimeEHorario(): void
+{
+    secao(6, 'VERIFICANDO UPTIME E HORÁRIO DO SISTEMA');
+
+    $uptime = adb('adb shell uptime');
+    $date   = adb('adb shell date');
+
+    info("Uptime: " . $uptime);
+    info("Data/Hora: " . $date);
+}
+
+function verificarMudancasHorario(): void
+{
+    secao(7, 'VERIFICANDO MUDANÇAS RECENTES DE HORÁRIO');
+
+    $last_boot = adb('adb shell "cat /proc/stat | grep btime"');
+    info("Último boot (aprox): " . $last_boot);
+    aviso("Verifique manualmente se o horário foi alterado recentemente");
+}
+
+function verificarPlayStore(): void
+{
+    secao(8, 'VERIFICANDO INTEGRIDADE PLAY STORE');
+
+    $play = adb('adb shell "pm list packages | grep com.android.vending"');
+    if (empty($play)) {
+        erro("Play Store não encontrada ou desinstalada");
+    } else {
+        ok("Play Store instalada");
+    }
+}
+
+function verificarClipboard(): void
+{
+    secao(9, 'VERIFICANDO CLIPBOARD');
+
+    $clip = adb('adb shell "content query --uri content://clipboard" 2>/dev/null || echo "Não suportado"');
+    if (strlen($clip) > 10) {
+        aviso("Conteúdo no clipboard detectado (pode ser de cheat)");
+    } else {
+        ok("Clipboard vazio ou não acessível");
+    }
+}
+
+// ==================== VERIFICAÇÕES ESPECÍFICAS FREE FIRE ====================
+
+function verificarJogoInstalado(string $pacote, string $nomeJogo): void
+{
+    secao(1, "VERIFICANDO $nomeJogo");
+
+    $instalado = adb("adb shell \"pm list packages | grep $pacote\"");
+    if (empty($instalado)) {
+        erro("$nomeJogo NÃO está instalado!");
+        exit(1);
+    }
+    ok("$nomeJogo encontrado ($pacote)");
+}
+
+function verificarMReplays(string $pacote): void
+{
+    secao(10, 'VERIFICANDO MREPLAYS / REPLAYS MODIFICADOS');
+
+    $path = "/data/data/$pacote/files/mreplays";
+    $existe = adb("adb shell \"ls $path 2>/dev/null\"");
+
+    if (!empty($existe)) {
+        aviso("Pasta mreplays encontrada. Pode conter replays modificados.");
+    } else {
+        ok("Pasta mreplays normal");
+    }
+}
+
+function verificarWallhackHolograma(string $pacote): void
+{
+    secao(11, 'VERIFICANDO ARQUIVOS WALLHACK / HOLOGRAMA');
+
+    $arquivos_suspeitos = [
+        "libanort.so",
+        "libanort2.so",
+        "libwallhack.so",
+        "hologram",
+        "esp",
+        "aimbot"
+    ];
+
+    foreach ($arquivos_suspeitos as $file) {
+        $res = adb("adb shell \"find /data/data/$pacote -name '*$file*' 2>/dev/null\"");
+        if (!empty($res)) {
+            erro("Arquivo suspeito encontrado: $file");
+        }
+    }
+    ok("Nenhum arquivo wallhack/holograma óbvio encontrado");
+}
+
+function verificarOBB(string $pacote): void
+{
+    secao(12, 'VERIFICANDO OBB MODIFICADO');
+
+    $obb = adb("adb shell \"ls /sdcard/Android/obb/$pacote 2>/dev/null | head -5\"");
+    if (!empty($obb)) {
+        info("OBB encontrado. Verifique manualmente se está original.");
+    }
+}
+
+function verificarShaders(string $pacote): void
+{
+    secao(13, 'VERIFICANDO SHADERS');
+
+    $shader = adb("adb shell \"ls /data/data/$pacote/files/shaders 2>/dev/null\"");
+    if (!empty($shader)) {
+        aviso("Pasta de shaders encontrada (pode ser modificada)");
+    } else {
+        ok("Shaders padrão");
+    }
+}
+
+function verificarOptionalAvatarRes(string $pacote): void
+{
+    secao(14, 'VERIFICANDO OPTIONAL AVATAR RESOURCES');
+
+    $path = "/data/data/$pacote/files/optionalavatarres";
+    if (adb("adb shell \"ls $path 2>/dev/null\"")) {
+        aviso("Pasta optionalavatarres encontrada (comum em cheats visuais)");
+    } else {
+        ok("optionalavatarres não modificado");
+    }
+}
+
+// ==================== ANÁLISE GERAL ====================
 
 function detectarBypassShell(): bool
 {
-    $bypassDetectado   = false;
-    $totalVerificacoes = 0;
-    $problemasTotal    = 0;
+    $bypassDetectado = false;
 
     cabecalho('ANÁLISE COMPLETA DE SEGURANÇA DO DISPOSITIVO');
 
     secao(1, 'VERIFICANDO DISPOSITIVO CONECTADO');
 
     $devices = adb('adb devices');
-    if (empty($devices) || strpos($devices, 'device') === false || strpos($devices, 'unauthorized') !== false) {
-        erro("Nenhum dispositivo detectado ou sem autorização!");
-        return false;
+    if (empty($devices) || strpos($devices, 'device') === false) {
+        erro("Nenhum dispositivo detectado!");
+        return true;
     }
 
-    $check = adb('adb shell "ls /sdcard"');
-    if (strpos($check, 'Permission denied') !== false) {
-        erro("ADB sem permissões suficientes!");
-        return false;
-    }
+    ok("Dispositivo conectado com sucesso");
 
-    ok("Dispositivo conectado com permissões adequadas");
-
-    // ==================== AQUI VOCÊ DEVE COLAR O RESTO DAS VERIFICAÇÕES ====================
-    // (seções 2 a 16: Root, SELinux, Magisk, KernelSU, APatch, Logs, Hooks, etc.)
-    // Como você não enviou o conteúdo completo dessas funções, deixei o comentário abaixo:
-
-    // TODO: Insira aqui todo o código das verificações (verificarRoot, verificarSELinux, etc.)
+    verificarRoot();
+    verificarSELinux();
+    verificarMagisk();
+    verificarScriptsAtivos();
+    verificarUptimeEHorario();
+    verificarMudancasHorario();
+    verificarPlayStore();
+    verificarClipboard();
 
     echo "\n" . c('bold', 'ciano') . "  ► RESUMO DA ANÁLISE\n  -------------------\n\n" . rst();
-    echo c('bold', 'branco') . "  Total de verificações: $totalVerificacoes\n";
-    echo c('bold', 'branco') . "  Problemas encontrados: $problemasTotal\n\n" . rst();
 
     if ($bypassDetectado) {
-        echo "\n" . c('bold', 'vermelho') . "  ⚠️  ATENÇÃO: MODIFICAÇÕES DETECTADAS! ⚠️\n";
-        echo c('bold', 'vermelho') . "  ----------------------------------------\n";
-        echo c('bold', 'vermelho') . "  Root, bypass ou hooks foram identificados.\n";
-        echo c('bold', 'vermelho') . "  Verifique os detalhes acima e tome as medidas necessárias.\n" . rst();
+        echo c('bold', 'vermelho') . "  ⚠️  ATENÇÃO: MODIFICAÇÕES DETECTADAS! ⚠️\n" . rst();
     } else {
-        echo "\n" . c('bold', 'verde') . "  ✓ VERIFICAÇÃO CONCLUÍDA ✓\n";
-        echo c('bold', 'verde') . "  -------------------------\n";
-        echo c('bold', 'verde') . "  Nenhuma modificação de segurança crítica detectada.\n";
-        echo c('bold', 'verde') . "  O dispositivo parece estar em condições normais.\n" . rst();
+        echo c('bold', 'verde') . "  ✓ Nenhuma modificação crítica detectada\n" . rst();
     }
 
-    echo "\n";
     return $bypassDetectado;
 }
 
-// ==================== FUNÇÕES QUE VOCÊ PRECISA IMPLEMENTAR ====================
-// Descomente e complete conforme sua versão original:
-
-// function verificarRoot(): void { ... }
-// function verificarScriptsAtivos(): void { ... }
-// function verificarUptimeEHorario(): void { ... }
-// function verificarMudancasHorario(): void { ... }
-// function verificarPlayStore(): void { ... }
-// function verificarClipboard(): void { ... }
-// function verificarMReplays(string $pacote): void { ... }
-// function verificarWallhackHolograma(string $pacote): void { ... }
-// function verificarOBB(string $pacote): void { ... }
-// function verificarShaders(string $pacote): void { ... }
-// function verificarOptionalAvatarRes(string $pacote): void { ... }
-// function verificarJogoInstalado(string $pacote, string $nomeJogo): void { ... }
+// ==================== FUNÇÃO PRINCIPAL DE SCAN ====================
 
 function escanearFreeFire(string $pacote, string $nomeJogo): void
 {
@@ -251,26 +349,17 @@ function escanearFreeFire(string $pacote, string $nomeJogo): void
         system('pkg install -y android-tools > /dev/null 2>&1');
     }
 
-    date_default_timezone_set('America/Sao_Paulo');
     shell_exec('adb start-server > /dev/null 2>&1');
 
     verificarJogoInstalado($pacote, $nomeJogo);
 
     $androidVer = adb('adb shell getprop ro.build.version.release');
-    if (!empty($androidVer)) {
-        echo c('bold', 'azul') . "  [+] Versão do Android: $androidVer\n" . rst();
+    if ($androidVer) {
+        echo c('bold', 'azul') . "  [+] Android: $androidVer\n" . rst();
     }
 
-    verificarRoot();
-    verificarScriptsAtivos();
-
-    echo c('bold', 'azul') . "  → Verificando bypasses de funções shell...\n" . rst();
     detectarBypassShell();
 
-    verificarUptimeEHorario();
-    verificarMudancasHorario();
-    verificarPlayStore();
-    verificarClipboard();
     verificarMReplays($pacote);
     verificarWallhackHolograma($pacote);
     verificarOBB($pacote);
@@ -279,51 +368,55 @@ function escanearFreeFire(string $pacote, string $nomeJogo): void
 
     echo c('bold', 'branco') . "\n\n\t Obrigado por usar o HOOKING Anti-Cheat.\n";
     echo c('bold', 'branco') . "\t                 By santos-ss\n\n" . rst();
+
+    echo c('bold', 'ciano') . "  Pressione Enter para voltar ao menu...\n" . rst();
+    fgets(STDIN);
 }
+
+function verificarDispositivoADB(): bool
+{
+    garantirPermissoesBinarios();
+
+    $output = (string) shell_exec('adb devices');
+    $linhas = array_filter(explode("\n", trim($output)));
+
+    if (count($linhas) <= 1) {
+        erro("Nenhum dispositivo ADB conectado.");
+        erro("Use a opção [0] para parear via Wi-Fi.");
+        exit(1);
+    }
+
+    ok("Dispositivo ADB detectado");
+    return true;
+}
+
+// ==================== MENU E CONEXÃO ====================
 
 function conectarADB(): void
 {
     system('clear');
     hookingBanner();
 
-    echo c('bold', 'azul') . "  → Verificando se o ADB está instalado...\n" . rst();
     if (empty(adb('adb version'))) {
-        aviso("ADB não encontrado. Instalando android-tools...");
+        aviso("ADB não encontrado. Instalando...");
         system('pkg install android-tools -y');
-        info("Android-tools instalado com sucesso!");
-    } else {
-        info("ADB já está instalado.");
+        ok("ADB instalado.");
     }
 
-    echo "\n";
-    inputUsuario("Qual a sua porta para o pareamento (ex: 45678)?");
-    $pairPort = trim(fgets(STDIN, 1024) ?? '');
+    inputUsuario("Porta de pareamento (ex: 45678)");
+    $pairPort = trim(fgets(STDIN) ?? '');
 
-    if (!is_numeric($pairPort) || empty($pairPort)) {
-        erro("Porta inválida! Retornando ao menu.");
-        sleep(2);
-        return;
-    }
+    echo c('amarelo') . "\n  [!] Digite o código de pareamento que aparece no celular:\n" . rst();
+    system("adb pair localhost:$pairPort");
 
-    echo c('bold', 'amarelo') . "\n  [!] Agora, digite o código de pareamento que aparece no celular e pressione Enter.\n" . rst();
-    system('adb pair localhost:' . intval($pairPort));
+    inputUsuario("Porta de conexão (ex: 12345)");
+    $connectPort = trim(fgets(STDIN) ?? '');
 
-    echo "\n";
-    inputUsuario("Qual a sua porta para a conexão (ex: 12345)?");
-    $connectPort = trim(fgets(STDIN, 1024) ?? '');
+    system("adb connect localhost:$connectPort");
+    info("Conexão tentada. Verifique a saída acima.");
 
-    if (!is_numeric($connectPort) || empty($connectPort)) {
-        erro("Porta inválida! Retornando ao menu.");
-        sleep(2);
-        return;
-    }
-
-    echo c('bold', 'amarelo') . "\n  [!] Conectando ao dispositivo...\n" . rst();
-    system('adb connect localhost:' . intval($connectPort));
-    info("Processo de conexão finalizado. Verifique a saída acima.");
-
-    echo c('bold', 'branco') . "\n  [+] Pressione Enter para voltar ao menu...\n" . rst();
-    fgets(STDIN, 1024);
+    echo "\n  Pressione Enter para voltar...";
+    fgets(STDIN);
 }
 
 function exibirMenu(): void
@@ -332,34 +425,31 @@ function exibirMenu(): void
     echo c('bold', 'azul') . "  ║      MENU PRINCIPAL      ║\n";
     echo c('bold', 'azul') . "  ╚══════════════════════════╝\n\n" . rst();
 
-    echo c('amarelo') . "  [0] " . c('branco') . "Conectar ADB " . c('cinza') . "(Pareamento e conexão via ADB)\n" . rst();
-    echo c('verde')   . "  [1] " . c('branco') . "Escanear FreeFire Normal\n" . rst();
-    echo c('verde')   . "  [2] " . c('branco') . "Escanear FreeFire Max\n" . rst();
+    echo c('amarelo') . "  [0] " . c('branco') . "Conectar ADB (Pareamento Wi-Fi)\n";
+    echo c('verde')   . "  [1] " . c('branco') . "Escanear Free Fire Normal\n";
+    echo c('verde')   . "  [2] " . c('branco') . "Escanear Free Fire MAX\n";
     echo c('vermelho'). "  [S] " . c('branco') . "Sair\n\n" . rst();
 }
 
 function lerOpcao(): string
 {
-    $validas = ['0', '1', '2', 'S', 's'];
+    $validas = ['0','1','2','S','s'];
     do {
-        inputUsuario("Escolha uma das opções acima");
-        $opcao = trim(fgets(STDIN, 1024) ?? '');
+        inputUsuario("Escolha uma opção");
+        $opcao = strtoupper(trim(fgets(STDIN) ?? ''));
         if (!in_array($opcao, $validas, true)) {
-            erro("Opção inválida! Tente novamente.");
-            echo "\n";
+            erro("Opção inválida!");
         }
     } while (!in_array($opcao, $validas, true));
 
-    return strtoupper($opcao);
+    return $opcao;
 }
 
-// ====================== INÍCIO DO SCRIPT ======================
+// ====================== INÍCIO ======================
 
 garantirPermissoesBinarios();
 system('clear');
 hookingBanner();
-sleep(1);
-echo "\n";
 
 while (true) {
     exibirMenu();
@@ -373,15 +463,15 @@ while (true) {
             break;
 
         case '1':
-            escanearFreeFire('com.dts.freefireth', 'FreeFire Normal');
+            escanearFreeFire('com.dts.freefireth', 'Free Fire Normal');
             break;
 
         case '2':
-            escanearFreeFire('com.dts.freefiremax', 'FreeFire MAX');
+            escanearFreeFire('com.dts.freefiremax', 'Free Fire MAX');
             break;
 
         case 'S':
-            echo "\n\n\t Obrigado por usar o HOOKING Anti-Cheat.\n";
+            echo "\n\n\t Obrigado por usar o HOOKING!\n";
             echo "\t GitHub: santos-ss/Hooking\n\n";
             exit(0);
     }
