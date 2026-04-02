@@ -58,12 +58,12 @@ function inputUsuario(string $mensagem): void
     echo c('rst', 'bold', 'ciano') . "  ▸ $mensagem: " . c('fverde');
 }
 
-// ==================== BANNER KELLERSS ====================
-function kellerBanner(): void
+// ==================== BANNER HOOKING ====================
+function HookingBanner(): void
 {
     echo c('branco') . "
-  " . c('branco') . "KellerSS Android " . c('ciano') . "Fucking Cheaters" . c('branco') . "
-  " . c('cinza') . "discord.gg/allianceoficial" . c('branco') . "
+  " . c('vermelho') . "Hooking ANTIBYPASS " . c('ciano') . "Fucking Cheaters" . c('branco') . "
+  " . c('ciano') . "discord.gg/hooking" . c('branco') . "
 
   )       (     (          (
   ( /(       )\ )  )\ )       )\ )
@@ -74,7 +74,7 @@ function kellerBanner(): void
   ' <  | _| | |__ | |__ | _| |   /
   _|\_\\ |___||____||____||___||_|_\\
 
-  " . c('ciano') . "Coded By: KellerSS | Credits: Sheik" . rst() . "\n\n";
+  " . c('vermelho) . "Coded By: HOOKING | Credits: Santos e r3" . rst() . "\n\n";
 }
 
 function garantirPermissoesBinarios(): void
